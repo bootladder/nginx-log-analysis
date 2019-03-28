@@ -28,6 +28,11 @@ main = do
   mapM f hs
   --mapM (putStrLn . show) goodLogs'
 
+  let es = endpoints goodLogs'
+  putStrLn $ "The Endpoints are : " ++ (show $ es)
+
+  let f e = putStrLn $ "Hits to " ++ e ++ " " ++ (show $ countEndpointHits e goodLogs')
+  mapM f es
 
 data NginxLog = NginxLog {
   hostname :: String,
@@ -47,11 +52,26 @@ hostnames logs =
           then acc
           else acc ++ [hostname log]
 
+endpoints :: [NginxLog] -> [String]
+endpoints logs =
+  foldl f [] logs
+  where f acc log =
+          if (endpoint log) `elem` acc
+          then acc
+          else acc ++ [endpoint log]
+
 
 countHits :: String -> [NginxLog] -> Int
 countHits matcher logs =
   foldl f 0 logs
   where f acc log = if (hostname log) == matcher
+                    then acc + 1
+                    else acc
+
+countEndpointHits :: String -> [NginxLog] -> Int
+countEndpointHits matcher logs =
+  foldl f 0 logs
+  where f acc log = if (endpoint log) == matcher
                     then acc + 1
                     else acc
 
