@@ -27,14 +27,19 @@ parseLogLine line = case (parse nginxParser "" line) of
 
 nginxParser :: Parser NginxLog
 nginxParser = do
-  hostname <- pHostname
-  ipAddr   <- pIpAddr
-  pTwoDashes
-  date     <- pDate
-  request  <- pRequest
-  status   <- pStatus
+  hostname <- pHostname <* whiteSpace
+  ipAddr   <- pIpAddr   <* whiteSpace
+  pTwoDashes            <* whiteSpace
+  date     <- pDate     <* whiteSpace
+  request  <- pRequest  <* whiteSpace
+  status   <- pStatus   <* whiteSpace
   return $ NginxLog hostname ipAddr date request status
 
+whiteSpace :: Parser ()
+whiteSpace = skipMany space
+
+
+--https://gist.github.com/peat/2212696
 pHostname :: Parser String
 pHostname = do
   segments <- (sepBy1 pSegment pSeparator)
@@ -48,21 +53,33 @@ pHostname = do
 
 pIpAddr :: Parser String
 pIpAddr = do
-  return "hello"
+  byte1 <- many digit
+  char '.'
+  byte2 <- many digit
+  char '.'
+  byte3 <- many digit
+  char '.'
+  byte4 <- many digit
+  return $ byte1 ++ "." ++ byte2 ++ "." ++ byte3 ++ "." ++ byte4
 
-pTwoDashes :: Parser String
+pTwoDashes :: Parser ()
 pTwoDashes = do
-  return "hello"
+  char '-'
+  whiteSpace
+  char '-'
+  return ()
 
 pDate :: Parser String
 pDate = do
-  return "hello"
+  char '['
+  manyTill anyChar (try (char ']'))
 
 pRequest :: Parser String
 pRequest = do
-  return "hello"
+  char '\"'
+  manyTill anyChar (try (char '\"'))
 
 pStatus :: Parser String
 pStatus = do
-  return "hello"
+  many digit
 
