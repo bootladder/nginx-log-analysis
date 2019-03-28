@@ -9,21 +9,57 @@ main = do
   contents <- readFile $ args !! 0
   let logLines = filter (not . null) $ lines contents
       logs = map parseLogLine logLines
-  mapM (putStrLn . show) logs
+      goodLogs = filter (\log -> case log of
+                            Left err -> False
+                            Right a -> True
+                        ) logs
+      goodLogs' = map (\log -> case log of
+                          Right a -> a) goodLogs
+      n = countHits "bonniebakerlaw.com" goodLogs'
+      m = countHits "blog.bootladder.com" goodLogs'
+
+      hs = hostnames goodLogs'
+
+
+  putStrLn $ "Hits to bonniebakerlaw.com : "  ++ (show n)
+  putStrLn $ "Hits to blog.bootladder.com : " ++ (show m)
+  putStrLn $ "The hostnames are " ++ (show hs)
+  let f h = putStrLn $ "Hits to " ++ h ++ " " ++ (show $ countHits h goodLogs')
+  mapM f hs
+  --mapM (putStrLn . show) goodLogs'
 
 
 data NginxLog = NginxLog {
   hostname :: String,
-  ip_addr :: String,
-  date :: String,
-  request :: String,
-  status :: String
+  ip_addr  :: String,
+  date     :: String,
+  method   :: String,
+  endpoint :: String,
+  protocol :: String,
+  status   :: String
                          } deriving (Show)
 
-parseLogLine :: String -> NginxLog
-parseLogLine line = case (parse nginxParser "" line) of
-  Left err -> NginxLog "fail" "fail" "fail" "fail" "fail"
-  Right log -> log
+hostnames :: [NginxLog] -> [String]
+hostnames logs =
+  foldl f [] logs
+  where f acc log =
+          if (hostname log) `elem` acc
+          then acc
+          else acc ++ [hostname log]
+
+
+countHits :: String -> [NginxLog] -> Int
+countHits matcher logs =
+  foldl f 0 logs
+  where f acc log = if (hostname log) == matcher
+                    then acc + 1
+                    else acc
+
+parseLogLine :: String -> Either String NginxLog
+parseLogLine line =
+  case (parse nginxParser "" line) of
+    Left err -> Left (show err)
+    Right log -> Right log
 
 nginxParser :: Parser NginxLog
 nginxParser = do
@@ -31,9 +67,12 @@ nginxParser = do
   ipAddr   <- pIpAddr   <* whiteSpace
   pTwoDashes            <* whiteSpace
   date     <- pDate     <* whiteSpace
-  request  <- pRequest  <* whiteSpace
+  char '\"'
+  method   <- pMethod   <* whiteSpace
+  endpoint <- pEndpoint <* whiteSpace
+  protocol <- pProtocol <* whiteSpace
   status   <- pStatus   <* whiteSpace
-  return $ NginxLog hostname ipAddr date request status
+  return $ NginxLog hostname ipAddr date method endpoint protocol status
 
 whiteSpace :: Parser ()
 whiteSpace = skipMany space
@@ -74,9 +113,16 @@ pDate = do
   char '['
   manyTill anyChar (try (char ']'))
 
-pRequest :: Parser String
-pRequest = do
-  char '\"'
+pMethod :: Parser String
+pMethod = do
+  manyTill anyChar (try space)
+
+pEndpoint :: Parser String
+pEndpoint = do
+  manyTill (anyChar <|> oneOf "/-_") (try space)
+
+pProtocol :: Parser String
+pProtocol = do
   manyTill anyChar (try (char '\"'))
 
 pStatus :: Parser String
