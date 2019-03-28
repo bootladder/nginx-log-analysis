@@ -15,24 +15,16 @@ main = do
                         ) logs
       goodLogs' = map (\log -> case log of
                           Right a -> a) goodLogs
-      n = countHits "bonniebakerlaw.com" goodLogs'
-      m = countHits "blog.bootladder.com" goodLogs'
-
       hs = hostnames goodLogs'
 
-
-  putStrLn $ "Hits to bonniebakerlaw.com : "  ++ (show n)
-  putStrLn $ "Hits to blog.bootladder.com : " ++ (show m)
   putStrLn $ "The hostnames are " ++ (show hs)
-  let f h = putStrLn $ "Hits to " ++ h ++ " " ++ (show $ countHits h goodLogs')
+  let f h = putStrLn $ "Hits to " ++ h ++ " " ++ (show $ countHitsByHostname h goodLogs')
   mapM f hs
-  --mapM (putStrLn . show) goodLogs'
 
   let es = endpoints goodLogs'
   putStrLn $ "The Endpoints are : " ++ (show $ es)
-
-  let f e = putStrLn $ "Hits to " ++ e ++ " " ++ (show $ countEndpointHits e goodLogs')
-  mapM f es
+  mapM (\e -> putStrLn $ "Hits to " ++ e ++ " " ++
+         (show $ countHitsByEndpoint e goodLogs')) es
 
 data NginxLog = NginxLog {
   hostname :: String,
@@ -44,34 +36,30 @@ data NginxLog = NginxLog {
   status   :: String
                          } deriving (Show)
 
-hostnames :: [NginxLog] -> [String]
-hostnames logs =
-  foldl f [] logs
-  where f acc log =
-          if (hostname log) `elem` acc
+hostnames logs = getUniqueFields hostname logs
+endpoints logs = getUniqueFields endpoint logs
+
+getUniqueFields :: (a -> String) -> [a] -> [String]
+getUniqueFields field records=
+  foldl f [] records
+  where f acc record =
+          if (field record) `elem` acc
           then acc
-          else acc ++ [hostname log]
-
-endpoints :: [NginxLog] -> [String]
-endpoints logs =
-  foldl f [] logs
-  where f acc log =
-          if (endpoint log) `elem` acc
-          then acc
-          else acc ++ [endpoint log]
+          else acc ++ [field record]
 
 
-countHits :: String -> [NginxLog] -> Int
-countHits matcher logs =
-  foldl f 0 logs
-  where f acc log = if (hostname log) == matcher
-                    then acc + 1
-                    else acc
+countHitsByHostname :: String -> [NginxLog] -> Int
+countHitsByHostname matcher logs =
+  countMatchingFields hostname matcher logs
 
-countEndpointHits :: String -> [NginxLog] -> Int
-countEndpointHits matcher logs =
-  foldl f 0 logs
-  where f acc log = if (endpoint log) == matcher
+countHitsByEndpoint :: String -> [NginxLog] -> Int
+countHitsByEndpoint matcher logs =
+  countMatchingFields endpoint matcher logs
+
+countMatchingFields :: (a -> String) -> String -> [a] -> Int
+countMatchingFields field matcher records =
+  foldl f 0 records
+  where f acc record = if (field record) == matcher
                     then acc + 1
                     else acc
 
@@ -128,24 +116,11 @@ pTwoDashes = do
   char '-'
   return ()
 
-pDate :: Parser String
 pDate = do
   char '['
   manyTill anyChar (try (char ']'))
 
-pMethod :: Parser String
-pMethod = do
-  manyTill anyChar (try space)
-
-pEndpoint :: Parser String
-pEndpoint = do
-  manyTill (anyChar <|> oneOf "/-_") (try space)
-
-pProtocol :: Parser String
-pProtocol = do
-  manyTill anyChar (try (char '\"'))
-
-pStatus :: Parser String
-pStatus = do
-  many digit
-
+pMethod   = do manyTill anyChar (try space)
+pEndpoint = do manyTill (anyChar <|> oneOf "/-_") (try space)
+pProtocol = do manyTill anyChar (try (char '\"'))
+pStatus   = do many digit
