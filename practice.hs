@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
@@ -5,6 +6,10 @@ import System.Environment
 import Data.List
 import Data.Either
 import Data.Ord
+--import Control.Applicative
+import Database.SQLite.Simple
+import Database.SQLite.Simple.FromRow
+
 
 data NginxLog = NginxLog {
   hostname :: String,
@@ -16,7 +21,19 @@ data NginxLog = NginxLog {
   status   :: String
   } deriving (Show)
 
+data TestField = TestField Int String deriving (Show)
+
+instance FromRow TestField where
+  fromRow = TestField <$> field <*> field
 main = do
+  conn <- open "test.db"
+  execute conn "INSERT INTO test (str) VALUES (?)"
+    (Only ("test string 2" :: String))
+  r <- query_ conn "SELECT * from test" :: IO [TestField]
+  mapM_ print r
+  close conn
+
+
   args <- getArgs
   contents <- readFile $ args !! 0
   let logLines = filter (not . null) $ lines contents
