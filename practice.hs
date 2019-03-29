@@ -3,28 +3,34 @@ import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import System.Environment
 import Data.List
+import Data.Either
+import Data.Ord
 
 main = do
   args <- getArgs
   contents <- readFile $ args !! 0
   let logLines = filter (not . null) $ lines contents
       logs = map parseLogLine logLines
-      goodLogs = filter (\log -> case log of
-                            Left err -> False
-                            Right a -> True
-                        ) logs
-      goodLogs' = map (\log -> case log of
-                          Right a -> a) goodLogs
-      hs = hostnames goodLogs'
+      goodLogs' = rights logs
 
+  let hs = hostnames goodLogs'
   putStrLn $ "The hostnames are " ++ (show hs)
-  let f h = putStrLn $ "Hits to " ++ h ++ " " ++ (show $ countHitsByHostname h goodLogs')
-  mapM f hs
+  mapM (\h -> putStrLn $ "Hits to " ++ h ++ " " ++
+         (show $ countHitsByHostname h goodLogs')) hs
 
   let es = endpoints goodLogs'
-  putStrLn $ "The Endpoints are : " ++ (show $ es)
+  putStrLn $ "The Endpoints are : " ++ (show es)
   mapM (\e -> putStrLn $ "Hits to " ++ e ++ " " ++
          (show $ countHitsByEndpoint e goodLogs')) es
+
+  putStrLn $ "The top 10 Endpoints are : "
+  let endpointsAndHits = map f es
+        where f e = (e, countHitsByEndpoint e goodLogs')
+      sortedEndpointsAndHits =
+        reverse $ sortBy (comparing snd) endpointsAndHits
+      top10 = take 10 sortedEndpointsAndHits
+
+  putStrLn $ show top10
 
 data NginxLog = NginxLog {
   hostname :: String,
