@@ -3,6 +3,7 @@ module Main where
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import System.Environment
+import System.Exit
 import Data.List (intercalate)
 import Data.Either
 import Data.Ord
@@ -48,14 +49,33 @@ createTableQuery = "CREATE TABLE IF NOT EXISTS nginxlogs\
                     \  status   text  );"
 
 main = do
-  -- Filename -> [NginxLog]
   args <- getArgs
-  contents <- readFile $ args !! 0
+  if (length args) < 2
+    then do putStrLn "Usage: access.log test.db"
+            exitWith (ExitFailure 2)
+    else do
+
+  let filename = args !! 0
+      dbname   = args !! 1
+
+  -- filename -> [NginxLog]
+  contents <- readFile filename
   let logLines = filter (not . null) $ lines contents
       logs = map parseLogLine logLines
       goodLogs' = rights logs
 
-  conn <- open "test.db"
+  let numFailed = (length $ lefts logs)
+  do
+    if  numFailed > 0
+    then do putStrLn $ (show numFailed) ++
+              " Log lines failed to parse..."
+            mapM_ (putStrLn . show) (lefts logs)
+    else return ()
+
+  let numSuccess = (length $ rights logs)
+  putStrLn ("Inserting " ++ (show numSuccess) ++ " into database")
+
+  conn <- open dbname
   execute_ conn createTableQuery
 
   let insertLog log =
@@ -66,8 +86,8 @@ main = do
 
   mapM_ insertLog goodLogs'
 
-  r <- query_ conn "SELECT * from nginxlogs limit 20" :: IO [NginxLog]
-  mapM_ print r
+  --r <- query_ conn "SELECT * from nginxlogs limit 20" :: IO [NginxLog]
+  --mapM_ print r
 
   close conn
   putStrLn "done!!!"
