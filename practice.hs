@@ -6,6 +6,16 @@ import Data.List
 import Data.Either
 import Data.Ord
 
+data NginxLog = NginxLog {
+  hostname :: String,
+  ip_addr  :: String,
+  date     :: String,
+  method   :: String,
+  endpoint :: String,
+  protocol :: String,
+  status   :: String
+  } deriving (Show)
+
 main = do
   args <- getArgs
   contents <- readFile $ args !! 0
@@ -32,15 +42,7 @@ main = do
 
   putStrLn $ show top10
 
-data NginxLog = NginxLog {
-  hostname :: String,
-  ip_addr  :: String,
-  date     :: String,
-  method   :: String,
-  endpoint :: String,
-  protocol :: String,
-  status   :: String
-                         } deriving (Show)
+-- PROCESS ------------------------------------------------
 
 hostnames logs = getUniqueFields hostname logs
 endpoints logs = getUniqueFields endpoint logs
@@ -58,7 +60,6 @@ countHitsByHostname :: String -> [NginxLog] -> Int
 countHitsByHostname matcher logs =
   countMatchingFields hostname matcher logs
 
-countHitsByEndpoint :: String -> [NginxLog] -> Int
 countHitsByEndpoint matcher logs =
   countMatchingFields endpoint matcher logs
 
@@ -69,6 +70,7 @@ countMatchingFields field matcher records =
                     then acc + 1
                     else acc
 
+-- PARSE --------------------------------------------------
 parseLogLine :: String -> Either String NginxLog
 parseLogLine line =
   case (parse nginxParser "" line) of
@@ -88,9 +90,7 @@ nginxParser = do
   status   <- pStatus   <* whiteSpace
   return $ NginxLog hostname ipAddr date method endpoint protocol status
 
-whiteSpace :: Parser ()
 whiteSpace = skipMany space
-
 
 --https://gist.github.com/peat/2212696
 pHostname :: Parser String
@@ -106,27 +106,13 @@ pHostname = do
 
 pIpAddr :: Parser String
 pIpAddr = do
-  byte1 <- many digit
-  char '.'
-  byte2 <- many digit
-  char '.'
-  byte3 <- many digit
-  char '.'
-  byte4 <- many digit
-  return $ byte1 ++ "." ++ byte2 ++ "." ++ byte3 ++ "." ++ byte4
+  segments <- (sepBy (many digit) (char '.'))
+  return $ intercalate "." segments
 
-pTwoDashes :: Parser ()
-pTwoDashes = do
-  char '-'
-  whiteSpace
-  char '-'
-  return ()
+pTwoDashes = do {char '-'; whiteSpace; char '-'; return ()}
+pDate      = do {char '['; manyTill anyChar (try (char ']'))}
+pMethod    = do manyTill anyChar (try space)
+pEndpoint  = do manyTill (anyChar <|> oneOf "/-_") (try space)
+pProtocol  = do manyTill anyChar (try (char '\"'))
+pStatus    = do many digit
 
-pDate = do
-  char '['
-  manyTill anyChar (try (char ']'))
-
-pMethod   = do manyTill anyChar (try space)
-pEndpoint = do manyTill (anyChar <|> oneOf "/-_") (try space)
-pProtocol = do manyTill anyChar (try (char '\"'))
-pStatus   = do many digit
