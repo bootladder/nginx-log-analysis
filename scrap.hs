@@ -65,3 +65,50 @@ sentence = do
 
 separator :: Parser ()
 separator = skipMany1 (space <|> char ',' <?> "")
+
+  let hs = hostnames goodLogs'
+  putStrLn $ "The hostnames are " ++ (show hs)
+  mapM (\h -> putStrLn $ "Hits to " ++ h ++ " " ++
+         (show $ countHitsByHostname h goodLogs')) hs
+
+  let es = endpoints goodLogs'
+  putStrLn $ "The Endpoints are : " ++ (show es)
+  mapM (\e -> putStrLn $ "Hits to " ++ e ++ " " ++
+         (show $ countHitsByEndpoint e goodLogs')) es
+
+  putStrLn $ "The top 10 Endpoints are : "
+  let endpointsAndHits = map f es
+        where f e = (e, countHitsByEndpoint e goodLogs')
+      sortedEndpointsAndHits =
+        reverse $ sortBy (comparing snd) endpointsAndHits
+      top10 = take 10 sortedEndpointsAndHits
+
+  putStrLn $ show top10
+
+-- PROCESS ------------------------------------------------
+
+hostnames logs = getUniqueFields hostname logs
+endpoints logs = getUniqueFields endpoint logs
+
+getUniqueFields :: (a -> String) -> [a] -> [String]
+getUniqueFields field records=
+  foldl f [] records
+  where f acc record =
+          if (field record) `elem` acc
+          then acc
+          else acc ++ [field record]
+
+
+countHitsByHostname :: String -> [NginxLog] -> Int
+countHitsByHostname matcher logs =
+  countMatchingFields hostname matcher logs
+
+countHitsByEndpoint matcher logs =
+  countMatchingFields endpoint matcher logs
+
+countMatchingFields :: (a -> String) -> String -> [a] -> Int
+countMatchingFields field matcher records =
+  foldl f 0 records
+  where f acc record = if (field record) == matcher
+                    then acc + 1
+                    else acc

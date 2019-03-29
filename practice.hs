@@ -3,15 +3,17 @@ module Main where
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import System.Environment
-import Data.List
+import Data.List (intercalate)
 import Data.Either
 import Data.Ord
---import Control.Applicative
+import Data.Int (Int64)
+import Data.Text (pack)
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromRow
 
 
 data NginxLog = NginxLog {
+  id       :: Int64,
   hostname :: String,
   ip_addr  :: String,
   date     :: String,
@@ -21,71 +23,55 @@ data NginxLog = NginxLog {
   status   :: String
   } deriving (Show)
 
-data TestField = TestField Int String deriving (Show)
+instance ToRow NginxLog where
+  toRow log = [SQLText $ pack $ hostname log
+              ,SQLText $ pack $ ip_addr  log
+              ,SQLText $ pack $ date     log
+              ,SQLText $ pack $ method   log
+              ,SQLText $ pack $ endpoint log
+              ,SQLText $ pack $ protocol log
+              ,SQLText $ pack $ status   log
+              ]
 
-instance FromRow TestField where
-  fromRow = TestField <$> field <*> field
+instance FromRow NginxLog where
+  fromRow = do
+    NginxLog <$> field <*> field <*> field <*> field <*> field <*> field <*> field <*> field
+
+createTableQuery = "CREATE TABLE IF NOT EXISTS nginxlogs\
+                    \ (id INTEGER PRIMARY KEY, \
+                    \  hostname text, \
+                    \  ip_addr  text, \
+                    \  date     text, \
+                    \  method   text, \
+                    \  endpoint text, \
+                    \  protocol text, \
+                    \  status   text  );"
+
 main = do
-  conn <- open "test.db"
-  execute conn "INSERT INTO test (str) VALUES (?)"
-    (Only ("test string 2" :: String))
-  r <- query_ conn "SELECT * from test" :: IO [TestField]
-  mapM_ print r
-  close conn
-
-
+  -- Filename -> [NginxLog]
   args <- getArgs
   contents <- readFile $ args !! 0
   let logLines = filter (not . null) $ lines contents
       logs = map parseLogLine logLines
       goodLogs' = rights logs
 
-  let hs = hostnames goodLogs'
-  putStrLn $ "The hostnames are " ++ (show hs)
-  mapM (\h -> putStrLn $ "Hits to " ++ h ++ " " ++
-         (show $ countHitsByHostname h goodLogs')) hs
+  conn <- open "test.db"
+  execute_ conn createTableQuery
 
-  let es = endpoints goodLogs'
-  putStrLn $ "The Endpoints are : " ++ (show es)
-  mapM (\e -> putStrLn $ "Hits to " ++ e ++ " " ++
-         (show $ countHitsByEndpoint e goodLogs')) es
+  let insertLog log =
+        execute conn "INSERT INTO nginxlogs \
+          \(hostname,ip_addr,date,method,endpoint,protocol,status) \
+          \VALUES (?,?,?,?,?,?,?)"
+        log
 
-  putStrLn $ "The top 10 Endpoints are : "
-  let endpointsAndHits = map f es
-        where f e = (e, countHitsByEndpoint e goodLogs')
-      sortedEndpointsAndHits =
-        reverse $ sortBy (comparing snd) endpointsAndHits
-      top10 = take 10 sortedEndpointsAndHits
+  mapM_ insertLog goodLogs'
 
-  putStrLn $ show top10
+  r <- query_ conn "SELECT * from nginxlogs limit 20" :: IO [NginxLog]
+  mapM_ print r
 
--- PROCESS ------------------------------------------------
+  close conn
+  putStrLn "done!!!"
 
-hostnames logs = getUniqueFields hostname logs
-endpoints logs = getUniqueFields endpoint logs
-
-getUniqueFields :: (a -> String) -> [a] -> [String]
-getUniqueFields field records=
-  foldl f [] records
-  where f acc record =
-          if (field record) `elem` acc
-          then acc
-          else acc ++ [field record]
-
-
-countHitsByHostname :: String -> [NginxLog] -> Int
-countHitsByHostname matcher logs =
-  countMatchingFields hostname matcher logs
-
-countHitsByEndpoint matcher logs =
-  countMatchingFields endpoint matcher logs
-
-countMatchingFields :: (a -> String) -> String -> [a] -> Int
-countMatchingFields field matcher records =
-  foldl f 0 records
-  where f acc record = if (field record) == matcher
-                    then acc + 1
-                    else acc
 
 -- PARSE --------------------------------------------------
 parseLogLine :: String -> Either String NginxLog
@@ -105,7 +91,7 @@ nginxParser = do
   endpoint <- pEndpoint <* whiteSpace
   protocol <- pProtocol <* whiteSpace
   status   <- pStatus   <* whiteSpace
-  return $ NginxLog hostname ipAddr date method endpoint protocol status
+  return $ NginxLog 0 hostname ipAddr date method endpoint protocol status
 
 whiteSpace = skipMany space
 
