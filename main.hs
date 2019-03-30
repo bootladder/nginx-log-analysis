@@ -37,7 +37,7 @@ createTableQuery = "CREATE TABLE IF NOT EXISTS nginxlogs\
 main = do
   args <- getArgs
   if (length args) < 2
-    then do putStrLn "Usage: access.log test.db"
+    then do putStrLn "Usage: nginxlogs.log sqlitedb.db"
             exitWith (ExitFailure 2)
     else do
 
