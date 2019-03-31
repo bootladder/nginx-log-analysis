@@ -70,7 +70,7 @@ main = do
           \VALUES (?,?,?,?,?,?,?)"
         log
 
-  mapM_ insertLog goodLogs'
+  withTransaction conn $ mapM_ insertLog goodLogs'
 
   --r <- query_ conn "SELECT * from nginxlogs limit 20" :: IO [NginxLog]
   --mapM_ print r
